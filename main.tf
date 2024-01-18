@@ -112,7 +112,17 @@ resource "aws_lambda_function" "this" {
     }
   }
 
-  tags = var.tags
+  dynamic "timeouts" {
+    for_each = length(var.timeouts) > 0 ? [true] : []
+
+    content {
+      create = try(var.timeouts.create, null)
+      update = try(var.timeouts.update, null)
+      delete = try(var.timeouts.delete, null)
+    }
+  }
+
+  tags = merge(var.tags, var.function_tags)
 
   depends_on = [
     null_resource.archive,
@@ -151,7 +161,7 @@ resource "aws_lambda_layer_version" "this" {
   description  = var.description
   license_info = var.license_info
 
-  compatible_runtimes      = length(var.compatible_runtimes) > 0 ? var.compatible_runtimes : [var.runtime]
+  compatible_runtimes      = length(var.compatible_runtimes) > 0 ? var.compatible_runtimes : (var.runtime == "" ? null : [var.runtime])
   compatible_architectures = var.compatible_architectures
   skip_destroy             = var.layer_skip_destroy
 
@@ -175,6 +185,7 @@ resource "aws_s3_object" "lambda_package" {
   storage_class = var.s3_object_storage_class
 
   server_side_encryption = var.s3_server_side_encryption
+  kms_key_id             = var.s3_kms_key_id
 
   tags = var.s3_object_tags_only ? var.s3_object_tags : merge(var.tags, var.s3_object_tags)
 
@@ -377,7 +388,7 @@ resource "aws_lambda_function_url" "this" {
 # to the TF application. The required data is where SAM CLI can find the Lambda function source code
 # and what are the resources that contain the building logic.
 resource "null_resource" "sam_metadata_aws_lambda_function" {
-  count = local.create && var.create_package && var.create_function && !var.create_layer ? 1 : 0
+  count = local.create && var.create_sam_metadata && var.create_package && var.create_function && !var.create_layer ? 1 : 0
 
   triggers = {
     # This is a way to let SAM CLI correlates between the Lambda function resource, and this metadata
@@ -405,7 +416,7 @@ resource "null_resource" "sam_metadata_aws_lambda_function" {
 # to the TF application. The required data is where SAM CLI can find the Lambda layer source code
 # and what are the resources that contain the building logic.
 resource "null_resource" "sam_metadata_aws_lambda_layer_version" {
-  count = local.create && var.create_package && var.create_layer ? 1 : 0
+  count = local.create && var.create_sam_metadata && var.create_package && var.create_layer ? 1 : 0
 
   triggers = {
     # This is a way to let SAM CLI correlates between the Lambda layer resource, and this metadata

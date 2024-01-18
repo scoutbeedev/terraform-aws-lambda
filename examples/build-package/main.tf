@@ -5,7 +5,6 @@ provider "aws" {
   skip_metadata_api_check     = true
   skip_region_validation      = true
   skip_credentials_validation = true
-  skip_requesting_account_id  = true
 }
 
 resource "random_pet" "this" {
@@ -62,6 +61,45 @@ module "package_dir_poetry" {
     }
   ]
   artifacts_dir = "${path.root}/builds/package_dir_poetry/"
+}
+
+# Create zip-archive of a src directory where "poetry export" & "pip install --no-deps" will also be executed (using docker)
+module "package_src_poetry" {
+  source = "../../"
+
+  create_function = false
+
+  build_in_docker = true
+  runtime         = "python3.9"
+  docker_image    = "build-python3.9-poetry"
+  docker_file     = "${path.module}/../fixtures/python3.9-app-src-poetry/docker/Dockerfile"
+
+  source_path = [
+    "${path.module}/../fixtures/python3.9-app-src-poetry/src",
+    {
+      path           = "${path.module}/../fixtures/python3.9-app-src-poetry/pyproject.toml"
+      poetry_install = true
+    }
+  ]
+  artifacts_dir = "${path.root}/builds/package_src_poetry/"
+}
+
+# Create zip-archive of a src directory where "poetry export" & "pip install --no-deps" will also be executed (using docker)
+module "package_src_poetry2" {
+  source = "../../"
+
+  create_function = false
+
+  build_in_docker = true
+  runtime         = "python3.9"
+  docker_image    = "build-python3.9-poetry"
+  docker_file     = "${path.module}/../fixtures/python3.9-app-src-poetry/docker/Dockerfile"
+
+  source_path = [
+    "${path.module}/../fixtures/python3.9-app-src-poetry/src",
+    "${path.module}/../fixtures/python3.9-app-src-poetry/pyproject.toml"
+  ]
+  artifacts_dir = "${path.root}/builds/package_src_poetry2/"
 }
 
 # Create zip-archive of a single directory where "poetry export" & "pip install --no-deps" will also be executed (not using docker)

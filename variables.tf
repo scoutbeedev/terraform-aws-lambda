@@ -34,6 +34,12 @@ variable "create_lambda_function_url" {
   default     = false
 }
 
+variable "create_sam_metadata" {
+  description = "Controls whether the SAM metadata null resource should be created"
+  type        = bool
+  default     = false
+}
+
 variable "putin_khuylo" {
   description = "Do you agree that Putin doesn't respect Ukrainian sovereignty and territorial integrity? More info: https://en.wikipedia.org/wiki/Putin_khuylo!"
   type        = bool
@@ -72,11 +78,6 @@ variable "runtime" {
   description = "Lambda Function runtime"
   type        = string
   default     = ""
-
-  #  validation {
-  #    condition     = can(var.create && contains(["nodejs10.x", "nodejs12.x", "java8", "java11", "python2.7", " python3.6", "python3.7", "python3.8", "dotnetcore2.1", "dotnetcore3.1", "go1.x", "ruby2.5", "ruby2.7", "provided"], var.runtime))
-  #    error_message = "The runtime value must be one of supported by AWS Lambda."
-  #  }
 }
 
 variable "lambda_role" {
@@ -181,6 +182,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "function_tags" {
+  description = "A map of tags to assign only to the lambda function"
+  type        = map(string)
+  default     = {}
+}
+
 variable "s3_object_tags" {
   description = "A map of tags to assign to S3 bucket object."
   type        = map(string)
@@ -239,6 +246,12 @@ variable "replacement_security_group_ids" {
   description = "(Optional) List of security group IDs to assign to orphaned Lambda function network interfaces upon destruction. replace_security_groups_on_destroy must be set to true to use this attribute."
   type        = list(string)
   default     = null
+}
+
+variable "timeouts" {
+  description = "Define maximum timeout for creating, updating, and deleting Lambda Function resources"
+  type        = map(string)
+  default     = {}
 }
 
 ###############
@@ -481,6 +494,12 @@ variable "attach_cloudwatch_logs_policy" {
   default     = true
 }
 
+variable "attach_create_log_group_permission" {
+  description = "Controls whether to add the create log group permission to the CloudWatch logs policy"
+  type        = bool
+  default     = true
+}
+
 variable "attach_dead_letter_policy" {
   description = "Controls whether SNS/SQS dead letter notification policy should be added to IAM role for Lambda Function"
   type        = bool
@@ -671,6 +690,12 @@ variable "s3_server_side_encryption" {
   default     = null
 }
 
+variable "s3_kms_key_id" {
+  description = "Specifies a custom KMS key to use for S3 object encryption."
+  type        = string
+  default     = null
+}
+
 variable "source_path" {
   description = "The absolute path to a local file or directory containing your Lambda source code"
   type        = any # string | list(string | map(any))
@@ -733,6 +758,12 @@ variable "docker_entrypoint" {
 
 variable "recreate_missing_package" {
   description = "Whether to recreate missing Lambda package if it is missing locally or not"
+  type        = bool
+  default     = true
+}
+
+variable "trigger_on_package_timestamp" {
+  description = "Whether to recreate the Lambda package if the timestamp changes"
   type        = bool
   default     = true
 }
