@@ -2,6 +2,8 @@
 
 Terraform module that builds Docker image from `Dockerfile` and pushes it to ECR repository. Lambda can deploy container images from private ECR.
 
+If you need to create ECR resources in flexible way, you should use [terraform-aws-ecr module](https://github.com/terraform-aws-modules/terraform-aws-ecr/). See `examples/container-image` for related examples.
+
 This Terraform module is the part of [serverless.tf framework](https://github.com/antonbabenko/serverless.tf), which aims to simplify all operations when working with the serverless in Terraform.
 
 ## Usage
@@ -37,7 +39,7 @@ module "docker_image" {
 
   use_image_tag = true
   image_tag     = "1.0"
-  
+
   source_path     = "context"
   build_args      = {
     FOO = "bar"
@@ -47,10 +49,10 @@ module "docker_image" {
 
 ## Examples
 
-* [Container Image](https://github.com/terraform-aws-modules/terraform-aws-lambda/tree/master/examples/container-image) - Creates Docker Image and deploy Lambda Function using it.
+* [Container Image](https://github.com/terraform-aws-modules/terraform-aws-lambda/tree/master/examples/container-image) - Creates Docker Image, ECR resository and deploys it Lambda Function.
 
 
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+<!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
@@ -114,7 +116,7 @@ No modules.
 |------|-------------|
 | <a name="output_image_id"></a> [image\_id](#output\_image\_id) | The ID of the Docker image |
 | <a name="output_image_uri"></a> [image\_uri](#output\_image\_uri) | The ECR image URI for deploying lambda |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+<!-- END_TF_DOCS -->
 
 ## Authors
 

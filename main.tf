@@ -41,6 +41,7 @@ resource "aws_lambda_function" "this" {
   code_signing_config_arn            = var.code_signing_config_arn
   replace_security_groups_on_destroy = var.replace_security_groups_on_destroy
   replacement_security_group_ids     = var.replacement_security_group_ids
+  skip_destroy                       = var.skip_destroy
 
   /* ephemeral_storage is not supported in gov-cloud region, so it should be set to `null` */
   dynamic "ephemeral_storage" {
@@ -91,8 +92,9 @@ resource "aws_lambda_function" "this" {
   dynamic "vpc_config" {
     for_each = var.vpc_subnet_ids != null && var.vpc_security_group_ids != null ? [true] : []
     content {
-      security_group_ids = var.vpc_security_group_ids
-      subnet_ids         = var.vpc_subnet_ids
+      security_group_ids          = var.vpc_security_group_ids
+      subnet_ids                  = var.vpc_subnet_ids
+      ipv6_allowed_for_dual_stack = var.ipv6_allowed_for_dual_stack
     }
   }
 
@@ -112,6 +114,19 @@ resource "aws_lambda_function" "this" {
     }
   }
 
+  dynamic "logging_config" {
+    # Dont create logging config on gov cloud as it is not avaible.
+    # See https://github.com/hashicorp/terraform-provider-aws/issues/34810
+    for_each = data.aws_partition.current.partition == "aws" ? [true] : []
+
+    content {
+      log_group             = var.logging_log_group
+      log_format            = var.logging_log_format
+      application_log_level = var.logging_log_format == "Text" ? null : var.logging_application_log_level
+      system_log_level      = var.logging_log_format == "Text" ? null : var.logging_system_log_level
+    }
+  }
+
   dynamic "timeouts" {
     for_each = length(var.timeouts) > 0 ? [true] : []
 
@@ -122,7 +137,11 @@ resource "aws_lambda_function" "this" {
     }
   }
 
-  tags = merge(var.tags, var.function_tags)
+  tags = merge(
+    { terraform-aws-modules = "lambda" },
+    var.tags,
+    var.function_tags
+  )
 
   depends_on = [
     null_resource.archive,
@@ -189,21 +208,33 @@ resource "aws_s3_object" "lambda_package" {
 
   tags = var.s3_object_tags_only ? var.s3_object_tags : merge(var.tags, var.s3_object_tags)
 
+  dynamic "override_provider" {
+    for_each = var.s3_object_override_default_tags ? [true] : []
+
+    content {
+      default_tags {
+        tags = {}
+      }
+    }
+  }
+
   depends_on = [null_resource.archive]
 }
 
 data "aws_cloudwatch_log_group" "lambda" {
   count = local.create && var.create_function && !var.create_layer && var.use_existing_cloudwatch_log_group ? 1 : 0
 
-  name = "/aws/lambda/${var.lambda_at_edge ? "us-east-1." : ""}${var.function_name}"
+  name = coalesce(var.logging_log_group, "/aws/lambda/${var.lambda_at_edge ? "us-east-1." : ""}${var.function_name}")
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
   count = local.create && var.create_function && !var.create_layer && !var.use_existing_cloudwatch_log_group ? 1 : 0
 
-  name              = "/aws/lambda/${var.lambda_at_edge ? "us-east-1." : ""}${var.function_name}"
+  name              = coalesce(var.logging_log_group, "/aws/lambda/${var.lambda_at_edge ? "us-east-1." : ""}${var.function_name}")
   retention_in_days = var.cloudwatch_logs_retention_in_days
   kms_key_id        = var.cloudwatch_logs_kms_key_id
+  skip_destroy      = var.cloudwatch_logs_skip_destroy
+  log_group_class   = var.cloudwatch_logs_log_group_class
 
   tags = merge(var.tags, var.cloudwatch_logs_tags)
 }
@@ -256,13 +287,18 @@ resource "aws_lambda_permission" "current_version_triggers" {
   function_name = aws_lambda_function.this[0].function_name
   qualifier     = aws_lambda_function.this[0].version
 
-  statement_id       = try(each.value.statement_id, each.key)
-  action             = try(each.value.action, "lambda:InvokeFunction")
-  principal          = try(each.value.principal, format("%s.amazonaws.com", try(each.value.service, "")))
-  principal_org_id   = try(each.value.principal_org_id, null)
-  source_arn         = try(each.value.source_arn, null)
-  source_account     = try(each.value.source_account, null)
-  event_source_token = try(each.value.event_source_token, null)
+  statement_id_prefix    = try(each.value.statement_id, each.key)
+  action                 = try(each.value.action, "lambda:InvokeFunction")
+  principal              = try(each.value.principal, format("%s.amazonaws.com", try(each.value.service, "")))
+  principal_org_id       = try(each.value.principal_org_id, null)
+  source_arn             = try(each.value.source_arn, null)
+  source_account         = try(each.value.source_account, null)
+  event_source_token     = try(each.value.event_source_token, null)
+  function_url_auth_type = try(each.value.function_url_auth_type, null)
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Error: Error adding new Lambda Permission for lambda: InvalidParameterValueException: We currently do not support adding policies for $LATEST.
@@ -271,13 +307,18 @@ resource "aws_lambda_permission" "unqualified_alias_triggers" {
 
   function_name = aws_lambda_function.this[0].function_name
 
-  statement_id       = try(each.value.statement_id, each.key)
-  action             = try(each.value.action, "lambda:InvokeFunction")
-  principal          = try(each.value.principal, format("%s.amazonaws.com", try(each.value.service, "")))
-  principal_org_id   = try(each.value.principal_org_id, null)
-  source_arn         = try(each.value.source_arn, null)
-  source_account     = try(each.value.source_account, null)
-  event_source_token = try(each.value.event_source_token, null)
+  statement_id_prefix    = try(each.value.statement_id, each.key)
+  action                 = try(each.value.action, "lambda:InvokeFunction")
+  principal              = try(each.value.principal, format("%s.amazonaws.com", try(each.value.service, "")))
+  principal_org_id       = try(each.value.principal_org_id, null)
+  source_arn             = try(each.value.source_arn, null)
+  source_account         = try(each.value.source_account, null)
+  event_source_token     = try(each.value.event_source_token, null)
+  function_url_auth_type = try(each.value.function_url_auth_type, null)
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lambda_event_source_mapping" "this" {
@@ -299,6 +340,7 @@ resource "aws_lambda_event_source_mapping" "this" {
   topics                             = try(each.value.topics, null)
   queues                             = try(each.value.queues, null)
   function_response_types            = try(each.value.function_response_types, null)
+  tumbling_window_in_seconds         = try(each.value.tumbling_window_in_seconds, null)
 
   dynamic "destination_config" {
     for_each = try(each.value.destination_arn_on_failure, null) != null ? [true] : []
@@ -358,6 +400,18 @@ resource "aws_lambda_event_source_mapping" "this" {
       }
     }
   }
+
+  dynamic "document_db_event_source_config" {
+    for_each = try(each.value.document_db_event_source_config, [])
+
+    content {
+      database_name   = document_db_event_source_config.value.database_name
+      collection_name = try(document_db_event_source_config.value.collection_name, null)
+      full_document   = try(document_db_event_source_config.value.full_document, null)
+    }
+  }
+
+  tags = merge(var.tags, try(each.value.tags, {}))
 }
 
 resource "aws_lambda_function_url" "this" {
